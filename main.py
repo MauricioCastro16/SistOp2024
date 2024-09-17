@@ -1,40 +1,46 @@
-import pandas as pd
-
-# Cargar el archivo CSV en un DataFrame
-df = pd.read_csv('procesos.csv')
-
-# Mostrar las primeras 5 filas
-print(df.head())
 
 
-round_robin = 3
-grado_multiprogramacion = 5
-rendimiento_sistema = 0
+class cpu:
+	def __init__()
 
-particiones = [
-    {"id_particion": "Sistema operativo", 
-    "direccion_comienzo": 0, 
-    "tamaño_particion": 100000, 
-    "id_proceso_asignado": None, 
-    "fragmentacion_interna": None},
-    {"id_particion": "Trabajos grandes", 
-    "direccion_comienzo": 100001, 
-    "tamaño_particion": 250000, 
-    "id_proceso_asignado": None, 
-    "fragmentacion_interna": None},
-    {"id_particion": "Trabajos medianos", 
-    "direccion_comienzo": 350001, 
-    "tamaño_particion": 150000, 
-    "id_proceso_asignado": None, 
-    "fragmentacion_interna": None},
-    {"id_particion": "Trabajos pequeños", 
-    "direccion_comienzo": 500001, 
-    "tamaño_particion": 50000, 
-    "id_proceso_asignado": None, 
-    "fragmentacion_interna": None},
-]
+class proceso:
+	def __init__(Tr,Ta,Ti,Tam)
+		self.tr = Tr
+		self.ta = Ta
+		self.ti = Ti
+		self.tam = Tam
 
-procesos_terminados = [] #id_proceso, tiempo_retorno, tiempo_espera
-procesador = []
-cola_listos = []
+class memoria:
+	def __init__()
+		self.listaParticiones = []
+		par1 = particion("Sistema Operativo",0,99999)
+		listaParticiones.append(par1)
+		par2 = particion("Trabajos Grandes",100000,249999)
+		listaParticiones.append(par2)
+		par3 = particion("Trabajos Mediano",350000,149999)
+		listaParticiones.append(par3)
+		par4 = particion("Trabajos Pequeños",500000,49999)
+		listaParticiones.append(par4)
 
+#(Id de partición, dirección de comienzo de partición, tamaño de la partición, id de proceso asignado a la partición, fragmentación interna
+class particion:
+	def __init__(idM,dirInit,tam):
+		self.idM = idM
+		self.dirInit = dirInit
+		self.tam = tam
+		self.proceso = None
+		self.fragmInt = None
+	
+	def asignarProceso(proceso):
+		self.proceso = proceso
+		self.fragmInt = self.tam - proceso.tam
+
+	def liberarProceso():
+		self.proceso = None
+
+	def estaLibre():
+		return (self.proceso == None)
+
+if __name__ = __main__:
+	
+	
