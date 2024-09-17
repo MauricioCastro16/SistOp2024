@@ -6,6 +6,8 @@ df = pd.read_csv('procesos.csv')
 # Mostrar las primeras 5 filas
 print(df.head())
 
+#ASDF
+
 
 round_robin = 3
 grado_multiprogramacion = 5
