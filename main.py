@@ -1,3 +1,7 @@
+round_robin = 3
+grado_multiprogramacion = 5
+rendimiento_sistema = 0
+
 particiones = [
     {"id_particion": "Sistema operativo", 
     "direccion_comienzo": 0, 
