@@ -1,3 +1,8 @@
+import pandas as pd
+
+df = pd.read_csv('procesos.csv')
+
+
 particiones = [
     {"id_particion": "Sistema operativo", 
     "direccion_comienzo": 0, 
