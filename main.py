@@ -1,8 +1,3 @@
-import pandas as pd
-
-df = pd.read_csv('procesos.csv')
-
-
 particiones = [
     {"id_particion": "Sistema operativo", 
     "direccion_comienzo": 0, 
@@ -25,3 +20,8 @@ particiones = [
     "id_proceso_asignado": None, 
     "fragmentacion_interna": None},
 ]
+
+procesos_terminados = [] #id_proceso, tiempo_retorno, tiempo_espera
+procesador = []
+cola_listos = []
+
