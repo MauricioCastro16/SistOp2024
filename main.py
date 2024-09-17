@@ -1,8 +1,23 @@
 particiones = [
-    {"nombre": "Sistema Operativo", "espacio": "100K"},
-    {"nombre": "Trabajos Grandes", "espacio": "250K"},
-    {"nombre": "Trabajos Medianos", "espacio": "150K"},
-    {"nombre": "Trabajos Pequeños", "espacio": "50K"}
+    {"id_partición": "Sistema operativo", 
+    "dirección_comienzo": 0, 
+    "tamaño_partición": 100000, 
+    "id_proceso_asignado": None, 
+    "fragmentación_interna": None},
+    {"id_partición": "Trabajos grandes", 
+    "dirección_comienzo": 100001, 
+    "tamaño_partición": 250000, 
+    "id_proceso_asignado": None, 
+    "fragmentación_interna": None},
+    {"id_partición": "Trabajos medianos", 
+    "dirección_comienzo": 350001, 
+    "tamaño_partición": 150000, 
+    "id_proceso_asignado": None, 
+    "fragmentación_interna": None},
+    {"id_partición": "Trabajos pequeños", 
+    "dirección_comienzo": 500001, 
+    "tamaño_partición": 50000, 
+    "id_proceso_asignado": None, 
+    "fragmentación_interna": None},
 ]
 
-	
