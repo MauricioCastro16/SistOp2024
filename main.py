@@ -20,4 +20,3 @@ particiones = [
     "id_proceso_asignado": None, 
     "fragmentación_interna": None},
 ]
-
