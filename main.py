@@ -2,7 +2,32 @@
 
 class cpu:
 	def __init__(self):
-		print("hello")
+		self.memoria = memoria()
+		self.procesoActivo = None
+		self.quantum = 3
+		self.colaListos = []
+		self.tiempo = 0
+	
+	def ingresarProceso(self, proceso):
+		if self.procesoActivo is None:
+			self.procesoActivo = proceso
+	
+	def Procesar(self):
+		self.tiempo += 1
+		self.procesoActivo.tiempoEjecutado += 1
+		self.quantum -= 1
+		if self.procesoActivo.tiempoEjecutado == self.procesoActivo.tiempIrrupt:
+			self.terminarProceso()
+			return None
+		if self.quantum == 0:
+			self.quantum = 3
+			auxproceso = self.procesoActivo
+			self.terminarProceso()
+			return auxproceso
+	
+	def terminarProceso(self):
+		self.procesoActivo = None
+
 
 class proceso:
 	def __init__(self, idproc, tiempArrivo, tiempIrrupt, tamMem):
@@ -10,6 +35,7 @@ class proceso:
 		self.tiempArrivo = tiempArrivo
 		self.tiempIrrupt = tiempIrrupt
 		self.tamMem = tamMem
+		self.tiempEjecutado = 0
 
 class memoria:
 	def __init__(self):
@@ -43,6 +69,11 @@ class particion:
 		return (self.proceso == None)
 
 if __name__ == "__main__":
-	print("Hello world")
+	listaProcesos = []
+	colaListos = []
+	while True:
+		cpu.ingresarProceso(colaListos[0])
+		procesoEncolado = cpu.Procesar()
+		colaListos.append(cpu.Procesar()) #CUIDADO NONE SI APPENDEA
 	
 	
