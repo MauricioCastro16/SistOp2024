@@ -68,12 +68,17 @@ class particion:
 	def estaLibre(self):
 		return (self.proceso == None)
 
-if __name__ == "__main__":
+if __name__ == "__main__": # La instancia main ya se la otma dentro de cpu o hay que instanciarla?
+	cpu_inst = cpu() 
 	listaProcesos = []
 	colaListos = []
 	while True:
-		cpu.ingresarProceso(colaListos[0])
+		cpu.ingresarProceso(colaListos[0])  #Si la lista de procesos esta vacia, largaria error. tenemos en cuenta que nunca esta vacia la lista?
+		#if len(colaListos) > 0:
+    	#cpu.ingresarProceso(colaListos.pop(0))
+        #procesoEncolado = cpu_inst.Procesar()
+        #if procesoEncolado is not None:
+        #    colaListos.append(procesoEncolado)
 		procesoEncolado = cpu.Procesar()
 		colaListos.append(cpu.Procesar()) #CUIDADO NONE SI APPENDEA
-	
 	
