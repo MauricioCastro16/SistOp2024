@@ -17,7 +17,6 @@ def reproducir_musica():
 musica_activa = True
 archivo_csv = None
 tree = None
-pestanaProcesos = False
 
 def toggle_musica():
     global musica_activa
@@ -33,6 +32,7 @@ def cargar_csv():
     archivo_csv = filedialog.askopenfilename(filetypes=[("Archivos CSV", "*.csv")])
     if archivo_csv:
         df = pd.read_csv(archivo_csv)  # Cargar el archivo CSV en un DataFrame de pandas
+        print(df.head())  # Imprimir las primeras líneas del CSV para verificar la carga
         etiqueta_csv.config(text=f"Archivo cargado: {archivo_csv.split('/')[-1]}")  # Mostrar el nombre del archivo en la etiqueta
         agregarboton_procesos()
         mostrar_csv(df)
@@ -74,14 +74,6 @@ def mostrar_csv(df):
     # Agregar filas
     for _, row in df.iterrows():
         tree.insert("", "end", values=list(row))
-
-    # Función para ajustar el área de desplazamiento del canvas
-    def ajustar_scrollregion(event=None):
-        canvas.config(scrollregion=canvas.bbox("all"))
-
-    # Asociar la función de ajuste al evento de configuración del tree y el canvas
-    frame_canvas.bind("<Configure>", ajustar_scrollregion)
-    ventana.bind("<Configure>", ajustar_scrollregion)  # Ajusta el scroll al redimensionar la ventana
 
     # Limitar altura del Treeview al 20% de la ventana
     altura_ventana = ventana.winfo_height()
@@ -169,11 +161,8 @@ def cambiar_a_pestana_1():
     notebook.select(tab1)
 
 def agregarboton_procesos():
-    global pestanaProcesos  # Asegurarnos de usar la variable global
-    if not (pestanaProcesos):
-        boton2 = ttk.Button(control_frame, text="Procesos", command=cambiar_a_pestana_2)
-        boton2.pack(side=tk.LEFT, expand=True, fill="x")
-        pestanaProcesos = True
+    boton2 = ttk.Button(control_frame, text="Procesos", command=cambiar_a_pestana_2)
+    boton2.pack(side=tk.LEFT, expand=True, fill="x")
 
 def cambiar_a_pestana_2():
     notebook.select(tab2)
