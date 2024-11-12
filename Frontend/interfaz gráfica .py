@@ -1,33 +1,44 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, simpledialog, PhotoImage, messagebox
+from tkinter import ttk, filedialog
 from tkinter.simpledialog import Dialog
 from PIL import Image, ImageTk
 import pygame
 import pandas as pd
+import copy
+import time    
 
 # Inicializar pygame para manejar audio
 pygame.mixer.init()
 
-
-#Constantes
-multiprogramacion = 5
-round_robin = 3
-
-#Listas
-procesos_cargados = []
-procesos_nuevos = []
-procesos_listos = []
-procesos_terminados = []
-procesos_listos_y_en_suspension = []
-
-
-# Variables globales
-musica_activa = True
-archivo_csv = None
-tree = None
-pestanaProcesos = False
-frame_tabla = None
-boton_agregar_fila = None
+#Log para ir guardando cada t
+class Log:
+    def __init__(self):
+        self.procesosnuevos = []
+        self.procesoslistos = []
+        self.procesoslistosysuspendidos = []
+        self.procesosterminados = []
+        self.procesoenCPU = None
+        self.particiones = {
+            "trabajos_grandes": {"nombre_proceso": None, "tamano_proceso": None, "fragmentacion_interna": 0},
+            "trabajos_medianos": {"nombre_proceso": None, "tamano_proceso": None, "fragmentacion_interna": 0},
+            "trabajos_chiquitos": {"nombre_proceso": None, "tamano_proceso": None, "fragmentacion_interna": 0}
+        }
+    def __str__(self):
+        return f"Log(ProcesosNuevos={len(self.procesosnuevos)}, ProcesosListos={len(self.procesoslistos)}, ProcesosListosYSuspendidos={len(self.procesoslistosysuspendidos)}, ProcesosTerminados={len(self.procesosterminados)}, ProcesoEnCPU={self.procesoenCPU}, Particiones={len(self.particiones)})"
+    def agregar_procesos_nuevos(self, procesos):
+        self.procesosnuevos = procesos
+    def agregar_procesos_listos(self, procesos):
+        self.procesoslistos = procesos
+    def agregar_procesos_listos_y_suspendidos(self, procesos):
+        self.procesoslistosysuspendidos = procesos
+    def agregar_procesos_terminados(self, procesos):
+        self.procesosterminados = procesos
+    def cambiar_proceso_en_cpu(self, proceso):
+        self.procesoenCPU = proceso
+    def setear_proceso_en_particion(self, proceso, particion, tamano, fragmentacion):
+        self.particiones[particion]["nombre_proceso"] = proceso
+        self.particiones[particion]["tamano_proceso"] = tamano
+        self.particiones[particion]["fragmentacion_interna"] = fragmentacion
 
 #Clases a utilizar
 class Procesos:
@@ -36,8 +47,17 @@ class Procesos:
         self.ta = ta
         self.ti = ti
         self.tam_b = tam_b
+        self.estado = "nuevo"
+        self.tiempoEjecutado = 0
+        self.particion_asignada = None
     def __str__(self):
-        return f"Proceso(TR={self.tr}, TA={self.ta}, TI={self.ti}, TAM(B)={self.tam_b})"
+        return f"Proceso(TR={self.tr}, TA={self.ta}, TI={self.ti}, TAM(B)={self.tam_b}, TiempoEj={self.tiempoEjecutado})"
+    def nombreProceso(self):
+        return f"Proceso {self.tr}"
+    def asignar_particion(self, particion):
+        self.particion_asignada = particion
+    def obtener_particion(self):
+        return self.particion_asignada
 
 #Todo esto es para que la ventana de diálogo se seleccione solo
 class IntegerInputDialog(Dialog):
@@ -64,10 +84,37 @@ class IntegerInputDialog(Dialog):
             self.result = int(self.entry.get())
         except ValueError:
             self.result = None  # Si no es un entero válido, no guarda el resultado
+
+class Particiones:
+    def __init__(self, tamano, nombre):
+        self.tamano = tamano
+        self.fragmentacion = 0
+        self.proceso_asignado = None
+        self.nombre = nombre
+    def __str__(self):
+        return f"Partición {self.nombre}: TAM={self.tamano}, FRAG={self.fragmentacion}, Proceso={self.proceso_asignado}"
+    def setFragmentacion(self, fragmentacion):
+        self.fragmentacion = fragmentacion
+    def setProceso(self, proceso):
+        self.proceso_asignado = proceso
+
+particionGrande = Particiones(250000, "trabajos_grandes")
+particionMediana = Particiones(150000, "trabajos_medianos")
+particionChiquita = Particiones(50000, "trabajos_chiquitos")
+Memoria = [particionChiquita, particionGrande, particionMediana]
+
+# Variables globales
+musica_activa = True
+archivo_csv = None
+tree = None
+pestanaProcesos = False
+frame_tabla = None
+boton_agregar_fila = None
+historial = []
+
 def ask_integer(parent, title, prompt):
     dialog = IntegerInputDialog(parent, title, prompt)
     return dialog.result
-
 # Función para reproducir música
 def reproducir_musica():
     pygame.mixer.music.load('Frontend/musica.mp3')  # Asegúrate de que la música esté en el mismo directorio
@@ -246,25 +293,123 @@ def agregarboton_stats():
 
 #Empezar a tratar los procesos
 def empezar_procesos():
-    global procesos_cargados
+    global historial, Memoria
+    procesos_cargados = []
     if tree is not None:
-        procesos_cargados = []
-        agregarboton_procesos()
         for item in tree.get_children():
             valores = tree.item(item, 'values')
             tr = valores[0]; ta = valores[1]; ti = valores[2]; tam_b = valores[3]
-            proceso = Procesos(tr, ta, ti, tam_b)
+            proceso = Procesos(int(tr), int(ta), int(ti), int(tam_b))
             procesos_cargados.append(proceso)
-        
+        import time
+        cpu = None
+
+        #Listas
+        procesos_nuevos = []
+        procesos_listos = []
+        procesos_terminados = []
+        procesos_listos_y_en_suspension = []
+
+        t = 0
+        multiprogramacion = 5
+        quantum = 3
+        while not all(proceso.estado == "terminado" for proceso in procesos_cargados):
+            log = Log()
+            for proceso in procesos_cargados: #Planificador a largo plazo
+                if (proceso.ta == t):
+                    procesos_nuevos.append(proceso)
+            i = 0
+            while (len(procesos_nuevos) > 0) and (i <= (len(procesos_nuevos) - 1)):
+                procesonuevo = procesos_nuevos[i]
+                for particion in sorted(Memoria, key=lambda particion: particion.tamano, reverse=True):
+                    if particion.proceso_asignado is None and particion.tamano >= procesonuevo.tam_b:
+                        particion.proceso_asignado = procesonuevo
+                        procesos_nuevos.remove(procesonuevo)
+                        procesos_listos.append(procesonuevo)
+                        procesonuevo.estado = "listo"
+                        procesonuevo.asignar_particion(particion)
+                        multiprogramacion -= 1
+                        break
+                if procesonuevo.estado != "listo" and multiprogramacion != 0:
+                    procesos_nuevos.remove(procesonuevo)
+                    procesos_listos_y_en_suspension.append(procesonuevo)
+                    procesonuevo.estado = "listo y suspendido"
+                    multiprogramacion -= 1
+                if procesonuevo.estado == "nuevo":
+                    i += 1
+            if (cpu is None) and (len(procesos_listos) != 0):
+                cpu = procesos_listos.pop(0)
+                cpu.estado = "ejecutando"
+            log.agregar_procesos_nuevos(copy.deepcopy(procesos_nuevos))
+            log.agregar_procesos_listos(copy.deepcopy(procesos_listos))
+            log.agregar_procesos_listos_y_suspendidos(copy.deepcopy(procesos_listos_y_en_suspension))
+            log.agregar_procesos_terminados(copy.deepcopy(procesos_terminados))
+            log.cambiar_proceso_en_cpu(copy.deepcopy(cpu))
+            for part in Memoria:
+                proc = part.proceso_asignado
+                if proc:
+                    tamano = proc.tam_b
+                else:
+                    tamano = 0
+                fragmentacion = part.tamano - tamano
+                log.setear_proceso_en_particion(copy.deepcopy(proc), copy.deepcopy(part.nombre), copy.deepcopy(tamano), copy.deepcopy(fragmentacion))
+            t += 1
+            if cpu is not None: #Planificador a corto plazo
+                cpu.tiempoEjecutado += 1
+                if cpu.tiempoEjecutado == cpu.ti:
+                    cpu.estado = "terminado"
+                    procesos_terminados.append(cpu)
+                    particionDeMemoria = cpu.obtener_particion()
+                    particionDeMemoria.setProceso(None)
+                    cpu = None
+                    multiprogramacion += 1
+                if (t)%quantum == 0 and cpu is not None: #Round Robin
+                    cpu.estado = "listo"
+                    procesos_listos.append(cpu)
+                    cpu = None
+                if cpu is None:
+                    if len(procesos_listos)>0:
+                        cpu = procesos_listos.pop(0)
+                        cpu.estado = "ejecutando"
+                    if (len(procesos_listos) < (len(Memoria) - 1)):
+                        if len(procesos_listos_y_en_suspension)>0: #Planificador a mediano plazo
+                            for procesolistoysusp in procesos_listos_y_en_suspension:
+                                for particionMediano in sorted(Memoria, key=lambda particionMediano: particionMediano.tamano, reverse=True):
+                                    if particionMediano.proceso_asignado is None and particionMediano.tamano >= procesolistoysusp.tam_b:
+                                        particionMediano.proceso_asignado = procesolistoysusp
+                                        procesolistoysusp.estado = "listo"
+                                        procesolistoysusp.asignar_particion(particionMediano)
+                                        procesos_listos_y_en_suspension.remove(procesolistoysusp)
+                                        procesos_listos.append(procesolistoysusp)
+                                        break
+            historial.append(log)
+        agregarboton_procesos()
     else:
         etiqueta_csv.config(text=f"¡Cargar procesos!")
     
 
 def procesamientoProcesos():
+    global particionChiquita, particionMediana, particionGrande, historial
     def actualizar_variable(valor):
         # Actualiza la variable con el valor del Scale
         variable.set(f"Tiempo actual: {valor}")
+        print(historial[int(valor)])
+        histActual = historial[int(valor)]
+        ParticionActualGrande = histActual.particiones["trabajos_grandes"]["tamano_proceso"]
+        ParticionActualMediana = histActual.particiones["trabajos_medianos"]["tamano_proceso"]
+        ParticionActualChiquita = histActual.particiones["trabajos_chiquitos"]["tamano_proceso"]
+        valorParticionGrande = ParticionActualGrande / particionGrande.tamano
+        valorParticionMediana = ParticionActualMediana / particionMediana.tamano
+        valorParticionChiquita = ParticionActualChiquita / particionChiquita.tamano
+        print(ParticionActualGrande)
+        print(particionGrande.tamano)
+        # Los 4 valores entre 0 y 1 que definirán el relleno de los rectángulos
+        valores = [1, valorParticionGrande , valorParticionMediana , valorParticionChiquita] 
+        print(valores)
+        dibujar_rectangulos(frameProcesado, valores)
     def dibujar_rectangulos(frame, valores):
+        for widget in frame.winfo_children():
+            widget.destroy()
         # Crear un canvas en el frame
         canvas = tk.Canvas(frame, width=450, height=450)
         canvas.pack(side= "left", anchor="nw")
@@ -278,43 +423,33 @@ def procesamientoProcesos():
         valores = [max(0, min(1, v)) for v in valores]
         # Configuración del margen para el borde de cada rectángulo
         margen_borde = 5  # Grosor del borde negro
-
         for i in range(4):
             # Altura del relleno
             altura_relleno = valores[i] * altura_rectangulo
-            
             # Coordenadas del rectángulo negro externo (borde)
             y1_borde = lado - (i + 1) * altura_rectangulo +5
             y2_borde = y1_borde + altura_rectangulo +5
-            
             # Dibujar el rectángulo negro para el borde
             canvas.create_rectangle(
                 10, y1_borde, lado - 10, y2_borde, 
                 outline="black", fill="black"
             )
-
             # Coordenadas del rectángulo interno blanco
             y1_interno = y1_borde + margen_borde
-
             # Dibujar el rectángulo blanco vacío
             canvas.create_rectangle(
                 10 + margen_borde, y1_interno, 
                 lado - 10 - margen_borde, y1_borde + altura_rectangulo - margen_borde, 
                 outline="black", fill="white"
             )
-
             # Dibujar el rectángulo azul de relleno
             canvas.create_rectangle(
                 10 + margen_borde, y1_interno + (altura_rectangulo - altura_relleno - margen_borde), 
                 lado - 10 - margen_borde, y1_borde + altura_rectangulo - margen_borde, 
                 outline="black", fill="blue"
             )
-    # Los 4 valores entre 0 y 1 que definirán el relleno de los rectángulos
-    valores = [1, 0.6, 0.8, 0.3]  # Cambia estos valores para probar diferentes rellenos
-    # Llamar a la función para dibujar los rectángulos
     frameProcesado = tk.Frame(tab2)
     frameProcesado.pack(side = "top", anchor="nw",expand=True, fill="x", pady=10)
-    dibujar_rectangulos(frameProcesado, valores)
     # Crear una variable para mostrar el valor actual
     frameDesplazamiento = tk.Frame(tab2)
     frameDesplazamiento.pack(side = "top", expand=True, fill="x", pady=10)
@@ -322,13 +457,13 @@ def procesamientoProcesos():
     label_variable = tk.Label(frameDesplazamiento, textvariable=variable)
     label_variable.pack(side = "bottom", anchor="sw", pady=10)
     # Crear el Scale de 0 a un valor máximo y que cambia el valor de la variable
-    valor_maximo = 50  # Define el valor máximo de la barra
+    actualizar_variable(0)
+    valor_maximo = len(historial) - 1  # Define el valor máximo de la barra
     barra_desplazamiento = tk.Scale(
         frameDesplazamiento, from_=0, to=valor_maximo, orient="horizontal", 
         command=actualizar_variable
     )
     barra_desplazamiento.pack(side="bottom", fill="x", padx=20, pady=20)
-
 # Crear la ventana principal
 ventana = tk.Tk()
 ventana.title("MirandOS")
