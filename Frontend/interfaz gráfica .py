@@ -1,11 +1,25 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, simpledialog, PhotoImage, messagebox
+from tkinter.simpledialog import Dialog
 from PIL import Image, ImageTk
 import pygame
 import pandas as pd
 
 # Inicializar pygame para manejar audio
 pygame.mixer.init()
+
+
+#Constantes
+multiprogramacion = 5
+round_robin = 3
+
+#Listas
+procesos_cargados = []
+procesos_nuevos = []
+procesos_listos = []
+procesos_terminados = []
+procesos_listos_y_en_suspension = []
+
 
 # Variables globales
 musica_activa = True
@@ -25,6 +39,34 @@ class Procesos:
     def __str__(self):
         return f"Proceso(TR={self.tr}, TA={self.ta}, TI={self.ti}, TAM(B)={self.tam_b})"
 
+#Todo esto es para que la ventana de diálogo se seleccione solo
+class IntegerInputDialog(Dialog):
+    def __init__(self, parent, title, prompt):
+        self.prompt = prompt
+        self.result = None
+        super().__init__(parent, title=title)
+
+    def body(self, master):
+        # Configura la ventana de diálogo para que aparezca enfocada y al frente
+        self.grab_set()  # Bloquea el foco en esta ventana hasta que se cierre
+
+        tk.Label(master, text=self.prompt).grid(row=0, column=0, padx=5, pady=5)
+        self.entry = ttk.Entry(master)
+        self.entry.grid(row=1, column=0, padx=5, pady=5)
+
+        self.entry.focus()  # Enfoca automáticamente el campo de entrada
+        self.entry.select_range(0, tk.END)  # Selecciona todo el texto
+
+        return self.entry  # Retorna el campo para asegurar que esté enfocado
+
+    def apply(self):
+        try:
+            self.result = int(self.entry.get())
+        except ValueError:
+            self.result = None  # Si no es un entero válido, no guarda el resultado
+def ask_integer(parent, title, prompt):
+    dialog = IntegerInputDialog(parent, title, prompt)
+    return dialog.result
 
 # Función para reproducir música
 def reproducir_musica():
@@ -66,30 +108,29 @@ def cargar_csv_vacio():
     mostrar_csv(df)
 # Añadir una entrada en la tabla de procesos
 def add_row():
-    # Solicitar datos para cada columna y verificar que no se cancelen
     while True:
-        ta = simpledialog.askinteger("Entrada", "Ingrese TA:", parent = notebook)
+        ta = ask_integer(notebook, "Entrada", "Ingrese TA:")
         if ta is None:
             return  # Salir si se cancela
 
-        ti = simpledialog.askinteger("Entrada", "Ingrese TI:", parent = notebook)
+        ti = ask_integer(notebook, "Entrada", "Ingrese TI:")
         if ti is None:
             return  # Salir si se cancela
 
-        tam_b = simpledialog.askinteger("Entrada", "Ingrese TAM(B):", parent = notebook)
+        tam_b = ask_integer(notebook, "Entrada", "Ingrese TAM(B):")
         if tam_b is None:
             return  # Salir si se cancela
         
         index = len(tree.get_children()) + 1
         # Insertar la fila si todos los datos son válidos
-        tree.insert("", "end", values=[index, ta, ti, tam_b, "[X]"])
+        tree.insert("", "end", values=[index, ta, ti, tam_b, "❌"])
         break  # Salir del bucle si todo se ingresó correctamente
 # Borrar una entrada de la tabla de procesos
 def delete_row(event):
     # Obtener la fila seleccionada
     selected_item = tree.selection()
     if selected_item:
-        # Verificar si el clic fue en la columna de la casilla "[X]" (última columna)
+        # Verificar si el clic fue en la columna de la casilla "❌" (última columna)
         col = tree.identify_column(event.x)  # Obtiene la columna bajo el clic
         if col == "#5":  # La columna con el índice 5 es la última, ajusta si es necesario
             tree.delete(selected_item)  # Eliminar la fila
@@ -195,6 +236,7 @@ def agregarboton_procesos():
         boton2 = ttk.Button(control_frame, text="Procesos", command=cambiar_a_pestana_2)
         boton2.pack(side=tk.LEFT, expand=True, fill="x")
         pestanaProcesos = True
+    procesamientoProcesos()
 def agregarboton_memoria():
     boton3 = ttk.Button(control_frame, text="Memoria", command=cambiar_a_pestana_3)
     boton3.pack(side=tk.LEFT, expand=True, fill="x")
@@ -204,13 +246,88 @@ def agregarboton_stats():
 
 #Empezar a tratar los procesos
 def empezar_procesos():
-    agregarboton_procesos()
-    for item in tree.get_children():
-        valores = tree.item(item, 'values')
-        tr = valores[0]; ta = valores[1]; ti = valores[2]; tam_b = valores[3]
-        proceso = Procesos(tr, ta, ti, tam_b)
-        print(proceso)
+    global procesos_cargados
+    if tree is not None:
+        procesos_cargados = []
+        agregarboton_procesos()
+        for item in tree.get_children():
+            valores = tree.item(item, 'values')
+            tr = valores[0]; ta = valores[1]; ti = valores[2]; tam_b = valores[3]
+            proceso = Procesos(tr, ta, ti, tam_b)
+            procesos_cargados.append(proceso)
+        
+    else:
+        etiqueta_csv.config(text=f"¡Cargar procesos!")
+    
 
+def procesamientoProcesos():
+    def actualizar_variable(valor):
+        # Actualiza la variable con el valor del Scale
+        variable.set(f"Tiempo actual: {valor}")
+    def dibujar_rectangulos(frame, valores):
+        # Crear un canvas en el frame
+        canvas = tk.Canvas(frame, width=450, height=450)
+        canvas.pack(side= "left", anchor="nw")
+
+        # Dimensiones del cuadrado
+        lado = 400
+        # La altura de cada rectángulo será 1/4 del lado del cuadrado
+        altura_rectangulo = lado / 4
+        
+        # Asegúrate de que los valores estén entre 0 y 1
+        valores = [max(0, min(1, v)) for v in valores]
+        # Configuración del margen para el borde de cada rectángulo
+        margen_borde = 5  # Grosor del borde negro
+
+        for i in range(4):
+            # Altura del relleno
+            altura_relleno = valores[i] * altura_rectangulo
+            
+            # Coordenadas del rectángulo negro externo (borde)
+            y1_borde = lado - (i + 1) * altura_rectangulo +5
+            y2_borde = y1_borde + altura_rectangulo +5
+            
+            # Dibujar el rectángulo negro para el borde
+            canvas.create_rectangle(
+                10, y1_borde, lado - 10, y2_borde, 
+                outline="black", fill="black"
+            )
+
+            # Coordenadas del rectángulo interno blanco
+            y1_interno = y1_borde + margen_borde
+
+            # Dibujar el rectángulo blanco vacío
+            canvas.create_rectangle(
+                10 + margen_borde, y1_interno, 
+                lado - 10 - margen_borde, y1_borde + altura_rectangulo - margen_borde, 
+                outline="black", fill="white"
+            )
+
+            # Dibujar el rectángulo azul de relleno
+            canvas.create_rectangle(
+                10 + margen_borde, y1_interno + (altura_rectangulo - altura_relleno - margen_borde), 
+                lado - 10 - margen_borde, y1_borde + altura_rectangulo - margen_borde, 
+                outline="black", fill="blue"
+            )
+    # Los 4 valores entre 0 y 1 que definirán el relleno de los rectángulos
+    valores = [1, 0.6, 0.8, 0.3]  # Cambia estos valores para probar diferentes rellenos
+    # Llamar a la función para dibujar los rectángulos
+    frameProcesado = tk.Frame(tab2)
+    frameProcesado.pack(side = "top", anchor="nw",expand=True, fill="x", pady=10)
+    dibujar_rectangulos(frameProcesado, valores)
+    # Crear una variable para mostrar el valor actual
+    frameDesplazamiento = tk.Frame(tab2)
+    frameDesplazamiento.pack(side = "top", expand=True, fill="x", pady=10)
+    variable = tk.StringVar(value="Tiempo actual: 0")
+    label_variable = tk.Label(frameDesplazamiento, textvariable=variable)
+    label_variable.pack(side = "bottom", anchor="sw", pady=10)
+    # Crear el Scale de 0 a un valor máximo y que cambia el valor de la variable
+    valor_maximo = 50  # Define el valor máximo de la barra
+    barra_desplazamiento = tk.Scale(
+        frameDesplazamiento, from_=0, to=valor_maximo, orient="horizontal", 
+        command=actualizar_variable
+    )
+    barra_desplazamiento.pack(side="bottom", fill="x", padx=20, pady=20)
 
 # Crear la ventana principal
 ventana = tk.Tk()
