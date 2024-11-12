@@ -51,7 +51,7 @@ class Procesos:
         self.tiempoEjecutado = 0
         self.particion_asignada = None
     def __str__(self):
-        return f"Proceso(TR={self.tr}, TA={self.ta}, TI={self.ti}, TAM(B)={self.tam_b}, TiempoEj={self.tiempoEjecutado})"
+        return f"Proceso(TR={self.tr}, TA={self.ta}, TI={self.ti}, TAM(B)={self.tam_b})"
     def nombreProceso(self):
         return f"Proceso {self.tr}"
     def asignar_particion(self, particion):
@@ -405,11 +405,50 @@ def procesamientoProcesos():
         print(particionGrande.tamano)
         # Los 4 valores entre 0 y 1 que definirán el relleno de los rectángulos
         valores = [1, valorParticionGrande , valorParticionMediana , valorParticionChiquita] 
-        print(valores)
-        dibujar_rectangulos(frameProcesado, valores)
-    def dibujar_rectangulos(frame, valores):
-        for widget in frame.winfo_children():
+        for widget in frameProcesado.winfo_children():
             widget.destroy()
+        dibujar_rectangulos(frameProcesado, valores)
+        mostrar_colas(frameProcesado, histActual)
+
+    def mostrar_colas(frame, actual):
+        # Crear un canvas dentro del frame
+        canvas = tk.Canvas(frame)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Crear un subframe para organizar los widgets en el canvas
+        subframe = tk.Frame(canvas)
+        canvas.create_window((0, 0), window=subframe, anchor='nw')
+
+        # Crear una etiqueta para cada lista y mostrar sus elementos
+        etiquetas = [
+            ("Procesos Nuevos", actual.procesosnuevos),
+            ("Procesos Listos", actual.procesoslistos),
+            ("Procesos Listos y Suspendidos", actual.procesoslistosysuspendidos),
+            ("Procesos Terminados", actual.procesosterminados)
+        ]
+
+        for i, (titulo, lista) in enumerate(etiquetas):
+            label_titulo = tk.Label(subframe, text=titulo, font=('Arial', 16, 'bold'))
+            label_titulo.grid(row=i*2, column=0, sticky='w', padx=10, pady=(10, 0))
+
+            listbox = tk.Listbox(subframe, height=len(lista), width=50)
+            listbox.config(font=('Arial', 15))
+            for item in lista:
+                listbox.insert(tk.END, item)
+            listbox.grid(row=i*2+1, column=0, sticky='w', padx=10)
+
+        # Mostrar el proceso en CPU
+        label_cpu = tk.Label(subframe, text="Proceso en CPU", font=('Arial', 16, 'bold'))
+        label_cpu.grid(row=len(etiquetas) * 2, column=0, sticky='w', padx=10, pady=(10, 0))
+
+        proceso_cpu = tk.Label(subframe, text=str(actual.procesoenCPU) if actual.procesoenCPU else "Ninguno", font=('Arial', 15))
+        proceso_cpu.grid(row=len(etiquetas) * 2 + 1, column=0, sticky='w', padx=10)
+
+        # Configurar el canvas para que permita desplazarse si el contenido es mayor al tamaño del canvas
+        subframe.update_idletasks()
+        canvas.config(scrollregion=canvas.bbox("all"))
+
+    def dibujar_rectangulos(frame, valores):
         # Crear un canvas en el frame
         canvas = tk.Canvas(frame, width=450, height=450)
         canvas.pack(side= "left", anchor="nw")
@@ -427,8 +466,8 @@ def procesamientoProcesos():
             # Altura del relleno
             altura_relleno = valores[i] * altura_rectangulo
             # Coordenadas del rectángulo negro externo (borde)
-            y1_borde = lado - (i + 1) * altura_rectangulo +5
-            y2_borde = y1_borde + altura_rectangulo +5
+            y1_borde = lado - (i + 1) * altura_rectangulo
+            y2_borde = y1_borde + altura_rectangulo
             # Dibujar el rectángulo negro para el borde
             canvas.create_rectangle(
                 10, y1_borde, lado - 10, y2_borde, 
