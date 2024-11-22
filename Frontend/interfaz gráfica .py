@@ -51,7 +51,7 @@ class Procesos:
         self.tiempoEjecutado = 0
         self.particion_asignada = None
     def __str__(self):
-        return f"Proceso(TR={self.tr}, TA={self.ta}, TI={self.ti}, TAM(B)={self.tam_b})"
+        return f"Proceso {self.tr}: [T.Arribo: {self.ta}, T.Irrupción: {self.ti}, T.Restante: {self.ti - self.tiempoEjecutado}, Tamaño: {self.tam_b/1000}KB]"
     def nombreProceso(self):
         return f"Proceso {self.tr}"
     def asignar_particion(self, particion):
@@ -108,9 +108,11 @@ musica_activa = True
 archivo_csv = None
 tree = None
 pestanaProcesos = False
+pestanaStats = False
 frame_tabla = None
 boton_agregar_fila = None
 historial = []
+calculadorTiempos = {}
 
 def ask_integer(parent, title, prompt):
     dialog = IntegerInputDialog(parent, title, prompt)
@@ -274,8 +276,6 @@ def cambiar_a_pestana_2():
     notebook.select(tab2)
 def cambiar_a_pestana_3():
     notebook.select(tab3)
-def cambiar_a_pestana_4():
-    notebook.select(tab4)
 #Funciones para agregar las pestañas
 def agregarboton_procesos():
     global pestanaProcesos  # Asegurarnos de usar la variable global
@@ -284,13 +284,13 @@ def agregarboton_procesos():
         boton2.pack(side=tk.LEFT, expand=True, fill="x")
         pestanaProcesos = True
     procesamientoProcesos()
-def agregarboton_memoria():
-    boton3 = ttk.Button(control_frame, text="Memoria", command=cambiar_a_pestana_3)
-    boton3.pack(side=tk.LEFT, expand=True, fill="x")
+    cambiar_a_pestana_2()
 def agregarboton_stats():
-    boton4 = ttk.Button(control_frame, text="Estadísticas", command=cambiar_a_pestana_4)
-    boton4.pack(side=tk.LEFT, expand=True, fill="x")
-
+    global pestanaStats
+    if not (pestanaStats):
+        boton4 = ttk.Button(control_frame, text="Estadísticas", command=cambiar_a_pestana_3)
+        boton4.pack(side=tk.LEFT, expand=True, fill="x")
+        pestanaStats = True
 #Empezar a tratar los procesos
 def empezar_procesos():
     global historial, Memoria
@@ -313,6 +313,11 @@ def empezar_procesos():
         t = 0
         multiprogramacion = 5
         quantum = 3
+
+        global calculadorTiempos
+        for proceso in procesos_cargados:
+                calculadorTiempos[proceso] = {"tiempo_arribo": None, "tiempo_salida": None}
+
         while not all(proceso.estado == "terminado" for proceso in procesos_cargados):
             log = Log()
             for proceso in procesos_cargados: #Planificador a largo plazo
@@ -329,6 +334,8 @@ def empezar_procesos():
                         procesonuevo.estado = "listo"
                         procesonuevo.asignar_particion(particion)
                         multiprogramacion -= 1
+                        if calculadorTiempos[procesonuevo]["tiempo_arribo"] is None:
+                            calculadorTiempos[procesonuevo]["tiempo_arribo"] = t
                         break
                 if procesonuevo.estado != "listo" and multiprogramacion != 0:
                     procesos_nuevos.remove(procesonuevo)
@@ -340,23 +347,27 @@ def empezar_procesos():
             if (cpu is None) and (len(procesos_listos) != 0):
                 cpu = procesos_listos.pop(0)
                 cpu.estado = "ejecutando"
-            log.agregar_procesos_nuevos(copy.deepcopy(procesos_nuevos))
-            log.agregar_procesos_listos(copy.deepcopy(procesos_listos))
-            log.agregar_procesos_listos_y_suspendidos(copy.deepcopy(procesos_listos_y_en_suspension))
-            log.agregar_procesos_terminados(copy.deepcopy(procesos_terminados))
-            log.cambiar_proceso_en_cpu(copy.deepcopy(cpu))
-            for part in Memoria:
-                proc = part.proceso_asignado
-                if proc:
-                    tamano = proc.tam_b
-                else:
-                    tamano = 0
-                fragmentacion = part.tamano - tamano
-                log.setear_proceso_en_particion(copy.deepcopy(proc), copy.deepcopy(part.nombre), copy.deepcopy(tamano), copy.deepcopy(fragmentacion))
+            if t == 0:
+                log.agregar_procesos_nuevos(copy.deepcopy(procesos_nuevos))
+                log.agregar_procesos_listos(copy.deepcopy(procesos_listos))
+                log.agregar_procesos_listos_y_suspendidos(copy.deepcopy(procesos_listos_y_en_suspension))
+                log.agregar_procesos_terminados(copy.deepcopy(procesos_terminados))
+                log.cambiar_proceso_en_cpu(copy.deepcopy(cpu))
+                for part in Memoria:
+                    proc = part.proceso_asignado
+                    if proc:
+                        tamano = proc.tam_b
+                    else:
+                        tamano = 0
+                    fragmentacion = part.tamano - tamano
+                    log.setear_proceso_en_particion(copy.deepcopy(proc), copy.deepcopy(part.nombre), copy.deepcopy(tamano), copy.deepcopy(fragmentacion))
+                historial.append(log)
+                log = Log() #Hago otro log para que no se tome por referencia el mismo log y sobreescriba
             t += 1
             if cpu is not None: #Planificador a corto plazo
                 cpu.tiempoEjecutado += 1
                 if cpu.tiempoEjecutado == cpu.ti:
+                    calculadorTiempos[cpu]["tiempo_salida"] = t
                     cpu.estado = "terminado"
                     procesos_terminados.append(cpu)
                     particionDeMemoria = cpu.obtener_particion()
@@ -381,9 +392,25 @@ def empezar_procesos():
                                         procesolistoysusp.asignar_particion(particionMediano)
                                         procesos_listos_y_en_suspension.remove(procesolistoysusp)
                                         procesos_listos.append(procesolistoysusp)
+                                        if calculadorTiempos[procesolistoysusp]["tiempo_arribo"] is None:
+                                            calculadorTiempos[procesolistoysusp]["tiempo_arribo"] = t
                                         break
+            log.agregar_procesos_nuevos(copy.deepcopy(procesos_nuevos))
+            log.agregar_procesos_listos(copy.deepcopy(procesos_listos))
+            log.agregar_procesos_listos_y_suspendidos(copy.deepcopy(procesos_listos_y_en_suspension))
+            log.agregar_procesos_terminados(copy.deepcopy(procesos_terminados))
+            log.cambiar_proceso_en_cpu(copy.deepcopy(cpu))
+            for part in Memoria:
+                proc = part.proceso_asignado
+                if proc:
+                    tamano = proc.tam_b
+                else:
+                    tamano = 0
+                fragmentacion = part.tamano - tamano
+                log.setear_proceso_en_particion(copy.deepcopy(proc), copy.deepcopy(part.nombre), copy.deepcopy(tamano), copy.deepcopy(fragmentacion))
             historial.append(log)
         agregarboton_procesos()
+        procesarStats()
     else:
         etiqueta_csv.config(text=f"¡Cargar procesos!")
     
@@ -393,21 +420,25 @@ def procesamientoProcesos():
     def actualizar_variable(valor):
         # Actualiza la variable con el valor del Scale
         variable.set(f"Tiempo actual: {valor}")
-        print(historial[int(valor)])
         histActual = historial[int(valor)]
-        ParticionActualGrande = histActual.particiones["trabajos_grandes"]["tamano_proceso"]
-        ParticionActualMediana = histActual.particiones["trabajos_medianos"]["tamano_proceso"]
-        ParticionActualChiquita = histActual.particiones["trabajos_chiquitos"]["tamano_proceso"]
-        valorParticionGrande = ParticionActualGrande / particionGrande.tamano
-        valorParticionMediana = ParticionActualMediana / particionMediana.tamano
-        valorParticionChiquita = ParticionActualChiquita / particionChiquita.tamano
-        print(ParticionActualGrande)
-        print(particionGrande.tamano)
         # Los 4 valores entre 0 y 1 que definirán el relleno de los rectángulos
-        valores = [1, valorParticionGrande , valorParticionMediana , valorParticionChiquita] 
+        valores = [1, 
+                    (histActual.particiones["trabajos_grandes"]["tamano_proceso"]) / particionGrande.tamano, 
+                    (histActual.particiones["trabajos_medianos"]["tamano_proceso"]) / particionMediana.tamano, 
+                    (histActual.particiones["trabajos_chiquitos"]["tamano_proceso"]) / particionChiquita.tamano]
+        procesos = ["Sistema Operativo", 
+                    histActual.particiones["trabajos_grandes"]["nombre_proceso"], 
+                    histActual.particiones["trabajos_medianos"]["nombre_proceso"], 
+                    histActual.particiones["trabajos_chiquitos"]["nombre_proceso"]]
+        fragmentacion = [
+                    0,
+                    histActual.particiones["trabajos_grandes"]["fragmentacion_interna"],
+                    histActual.particiones["trabajos_medianos"]["fragmentacion_interna"],
+                    histActual.particiones["trabajos_chiquitos"]["fragmentacion_interna"]]
+        # Destruir los widgets existentes en el frame y dibujar los nuevos rectángulos
         for widget in frameProcesado.winfo_children():
             widget.destroy()
-        dibujar_rectangulos(frameProcesado, valores)
+        dibujar_rectangulos(frameProcesado, valores, procesos, fragmentacion)
         mostrar_colas(frameProcesado, histActual)
 
     def mostrar_colas(frame, actual):
@@ -428,29 +459,29 @@ def procesamientoProcesos():
         ]
 
         for i, (titulo, lista) in enumerate(etiquetas):
-            label_titulo = tk.Label(subframe, text=titulo, font=('Arial', 16, 'bold'))
+            label_titulo = tk.Label(subframe, text=titulo, font=('Arial', 14, 'bold'))
             label_titulo.grid(row=i*2, column=0, sticky='w', padx=10, pady=(10, 0))
 
-            listbox = tk.Listbox(subframe, height=len(lista), width=50)
-            listbox.config(font=('Arial', 15))
+            listbox = tk.Listbox(subframe, height=len(lista), width=65)
+            listbox.config(font=('Arial', 12))
             for item in lista:
                 listbox.insert(tk.END, item)
             listbox.grid(row=i*2+1, column=0, sticky='w', padx=10)
 
         # Mostrar el proceso en CPU
-        label_cpu = tk.Label(subframe, text="Proceso en CPU", font=('Arial', 16, 'bold'))
+        label_cpu = tk.Label(subframe, text="Proceso en CPU", font=('Arial', 14, 'bold'))
         label_cpu.grid(row=len(etiquetas) * 2, column=0, sticky='w', padx=10, pady=(10, 0))
 
-        proceso_cpu = tk.Label(subframe, text=str(actual.procesoenCPU) if actual.procesoenCPU else "Ninguno", font=('Arial', 15))
+        proceso_cpu = tk.Label(subframe, text=str(actual.procesoenCPU) if actual.procesoenCPU else "Ninguno", font=('Arial', 12))
         proceso_cpu.grid(row=len(etiquetas) * 2 + 1, column=0, sticky='w', padx=10)
 
         # Configurar el canvas para que permita desplazarse si el contenido es mayor al tamaño del canvas
         subframe.update_idletasks()
         canvas.config(scrollregion=canvas.bbox("all"))
 
-    def dibujar_rectangulos(frame, valores):
+    def dibujar_rectangulos(frame, valores, procesos, fragmentacion):
         # Crear un canvas en el frame
-        canvas = tk.Canvas(frame, width=450, height=450)
+        canvas = tk.Canvas(frame, width=600, height=450)
         canvas.pack(side= "left", anchor="nw")
 
         # Dimensiones del cuadrado
@@ -462,6 +493,7 @@ def procesamientoProcesos():
         valores = [max(0, min(1, v)) for v in valores]
         # Configuración del margen para el borde de cada rectángulo
         margen_borde = 5  # Grosor del borde negro
+        tamaños_particiones = ["100K", "250K", "150K", "50K"]
         for i in range(4):
             # Altura del relleno
             altura_relleno = valores[i] * altura_rectangulo
@@ -473,6 +505,27 @@ def procesamientoProcesos():
                 10, y1_borde, lado - 10, y2_borde, 
                 outline="black", fill="black"
             )
+            #Tratamiendo de texto en pantalla
+            proceso = procesos[i]
+            fragActual = fragmentacion[i] / 1000
+            if i!=0:
+                if proceso:
+                    nombre = proceso.nombreProceso()
+                    canvas.create_text(
+                        lado + 10, (y1_borde + y2_borde) / 2,  # Offset de 10 píxeles a la derecha
+                        text=f"{nombre}\nFragmentación: {fragActual}K", anchor="w", fill="blue"
+                    )
+                else:
+                    canvas.create_text(
+                        lado + 10, (y1_borde + y2_borde) / 2,  # Offset de 10 píxeles a la derecha
+                        text=f"Vacío", anchor="w", fill="blue"
+                    )
+                
+            else:
+                canvas.create_text(
+                    lado + 10, (y1_borde + y2_borde) / 2,  # Offset de 10 píxeles a la derecha
+                    text="Sistema Operativos", anchor="w", fill="blue"
+                )
             # Coordenadas del rectángulo interno blanco
             y1_interno = y1_borde + margen_borde
             # Dibujar el rectángulo blanco vacío
@@ -482,19 +535,26 @@ def procesamientoProcesos():
                 outline="black", fill="white"
             )
             # Dibujar el rectángulo azul de relleno
-            canvas.create_rectangle(
-                10 + margen_borde, y1_interno + (altura_rectangulo - altura_relleno - margen_borde), 
-                lado - 10 - margen_borde, y1_borde + altura_rectangulo - margen_borde, 
-                outline="black", fill="blue"
-            )
+            if valores[i] > 0.1:
+                canvas.create_rectangle(
+                    10 + margen_borde, y1_interno + (altura_rectangulo - altura_relleno - margen_borde), 
+                    lado - 10 - margen_borde, y1_borde + altura_rectangulo - margen_borde, 
+                    outline="black", fill="blue"
+                )
+            # Agregar el texto en el centro del cuadrado
+            tamaño_particion = tamaños_particiones[i]
+            canvas.create_text(
+                (lado) / 2, 
+                (y1_borde + y2_borde) / 2, 
+                text=tamaño_particion, fill="black", font=("Arial", 12, "bold"))
     frameProcesado = tk.Frame(tab2)
     frameProcesado.pack(side = "top", anchor="nw",expand=True, fill="x", pady=10)
-    # Crear una variable para mostrar el valor actual
     frameDesplazamiento = tk.Frame(tab2)
-    frameDesplazamiento.pack(side = "top", expand=True, fill="x", pady=10)
+    frameDesplazamiento.pack(side = "bottom", expand=True, fill="x", pady=10)
+    # Crear una variable para mostrar el valor actual
     variable = tk.StringVar(value="Tiempo actual: 0")
     label_variable = tk.Label(frameDesplazamiento, textvariable=variable)
-    label_variable.pack(side = "bottom", anchor="sw", pady=10)
+    label_variable.pack(side = "bottom", pady=10)
     # Crear el Scale de 0 a un valor máximo y que cambia el valor de la variable
     actualizar_variable(0)
     valor_maximo = len(historial) - 1  # Define el valor máximo de la barra
@@ -503,6 +563,70 @@ def procesamientoProcesos():
         command=actualizar_variable
     )
     barra_desplazamiento.pack(side="bottom", fill="x", padx=20, pady=20)
+
+def procesarStats():
+    global calculadorTiempos, historial
+    agregarboton_stats()
+    """Al finalizar la simulación se deberá presentar un informe estadístico con, tiempo de retorno y espera para cada
+    proceso y los respectivos tiempos promedios. También deberá calcular el rendimiento del sistema para la
+    simulación (cantidad de trabajos terminados por unidad de tiempo) """
+    promedioTiemposRetorno = 0
+    promedioTiemposEspera = 0
+    resultados = []
+    for proceso, tiempos in calculadorTiempos.items():
+        nombreProceso = proceso.nombreProceso()
+        tiempo_retorno = tiempos["tiempo_salida"] - tiempos["tiempo_arribo"]
+        promedioTiemposRetorno += tiempo_retorno
+        tiempo_espera = tiempo_retorno - proceso.ti
+        promedioTiemposEspera += tiempo_espera
+        resultados.append((nombreProceso, tiempo_retorno, tiempo_espera))
+    promedioTiemposRetorno /= len(calculadorTiempos)
+    promedioTiemposEspera /= len(calculadorTiempos)
+    rendimientoSistema = len(historial) / len(calculadorTiempos)
+
+    style = ttk.Style(tab3)
+    style.configure("Treeview.Heading", font=("Arial", 12, "bold"), anchor="center")  # Títulos en negrita y centrados
+    style.configure("Treeview", font=("Arial", 11), rowheight=30)  # Filas más grandes y fuente más grande
+
+
+    # Treeview para mostrar los tiempos de cada proceso
+    tree = ttk.Treeview(tab3, columns=("Nombre proceso", "Tiempo Retorno", "Tiempo Espera"), show="headings", height=10)
+    tree.heading("Nombre proceso", text="Nombre proceso")
+    tree.heading("Tiempo Retorno", text="Tiempo Retorno")
+    tree.heading("Tiempo Espera", text="Tiempo Espera")
+    tree.column("Nombre proceso", anchor="center", width=200) # Centrar columnas
+    tree.column("Tiempo Retorno", anchor="center", width=200)  
+    tree.column("Tiempo Espera", anchor="center", width=200)
+
+    # Insertar los datos de cada proceso
+    for proceso, tiempo_retorno, tiempo_espera in resultados:
+        tree.insert("", "end", values=(proceso, tiempo_retorno, tiempo_espera))
+
+    tree.pack(pady=10)
+
+    # Mostrar promedios y rendimiento
+    promedio_retorno_label = tk.Label(tab3, text=f"Promedio Tiempo Retorno: {promedioTiemposRetorno:.2f}", font=("Arial", 12))
+    promedio_retorno_label.pack(pady=5)
+    promedio_retorno_label.config(anchor="center", justify="center")
+
+    promedio_espera_label = tk.Label(tab3, text=f"Promedio Tiempo Espera: {promedioTiemposEspera:.2f}", font=("Arial", 12))
+    promedio_espera_label.pack(pady=5)
+    promedio_espera_label.config(anchor="center", justify="center")
+
+    rendimiento_label = tk.Label(tab3, text=f"Rendimiento del Sistema: {rendimientoSistema:.2f} trabajos por unidad de tiempo", font=("Arial", 12))
+    rendimiento_label.pack(pady=5)
+    rendimiento_label.config(anchor="center", justify="center")
+
+    # Añadir un texto de créditos
+    creditos_label = tk.Label(
+        tab3,
+        font=("Arial", 10, "italic"),
+        fg="gray",
+        text="Desarrollado por Miranda S.R.L.\nIntegrantes:\n•Cabral, Agustín\n•Castro, Mauricio\n•Cocito, Maximiliano\n•González, Matías\n•Miranda Pablo, Ulises\nSistemas Operativos 2024",
+        )
+    creditos_label.pack(side="bottom", pady=10)  # Colocar al final de la ventana
+
+
 # Crear la ventana principal
 ventana = tk.Tk()
 ventana.title("MirandOS")
@@ -516,12 +640,10 @@ notebook = ttk.Notebook(ventana)
 tab1 = ttk.Frame(notebook)
 tab2 = ttk.Frame(notebook)
 tab3 = ttk.Frame(notebook)
-tab4 = ttk.Frame(notebook)
 # Añadir las pestañas al Notebook
 notebook.add(tab1)
 notebook.add(tab2)
 notebook.add(tab3)
-notebook.add(tab4)
 # Crear un frame para los botones de control de pestañas
 control_frame = ttk.Frame(notebook)
 control_frame.pack(side=tk.TOP, fill="x")

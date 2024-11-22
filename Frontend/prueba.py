@@ -124,4 +124,3 @@ while not all(proceso.estado == "terminado" for proceso in procesos_cargados):
     print("Procesos listos:", [str(p) for p in procesos_listos])
     print("Procesos listos y suspendidos:", [str(p) for p in procesos_listos_y_en_suspension])
     print("CPU:", cpu)
-print("it's the end")
