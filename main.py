@@ -27,7 +27,7 @@ particiones = [
     "tamano_particion": 150000, 
     "id_proceso_asignado": None, 
     "fragmentacion_interna": None},
-    {"id_particion": "Trabajos peque�os", 
+    {"id_particion": "Trabajos pequenos", 
     "direccion_comienzo": 500001, 
     "tamano_particion": 50000, 
     "id_proceso_asignado": None, 
